@@ -35,6 +35,8 @@ import static java.util.Objects.requireNonNull;
  */
 public class HttpClient {
 
+    private static final String ERROR_WHILE_EXECUTING_REQUEST = "Error while executing request"; //$NON-NLS-1$
+
     private final OkHttpClient client;
 
     private HttpClient(final OkHttpClient client) {
@@ -74,7 +76,7 @@ public class HttpClient {
         try (final Response response = client.newCall(request).execute()) {
             return mapFunction.apply(response);
         } catch (IOException e) {
-            throw new HttpException("Error while executing request", e);
+            throw new HttpException(ERROR_WHILE_EXECUTING_REQUEST, e);
         }
     }
 
@@ -82,7 +84,7 @@ public class HttpClient {
         try (final Response response = client.newCall(request).execute()) {
             consumer.accept(response);
         } catch (IOException e) {
-            throw new HttpException("Error while executing request", e);
+            throw new HttpException(ERROR_WHILE_EXECUTING_REQUEST, e);
         }
     }
 
@@ -90,7 +92,7 @@ public class HttpClient {
         try (final Response response = client.newCall(request).execute()) {
             return response.isSuccessful();
         } catch (IOException e) {
-            throw new HttpException("Error while executing request", e);
+            throw new HttpException(ERROR_WHILE_EXECUTING_REQUEST, e);
         }
     }
 
@@ -98,7 +100,7 @@ public class HttpClient {
         try (Response response = client.newCall(request).execute()) {
             return parseJson(jsonNodeFunction, response);
         } catch (IOException e) {
-            throw new HttpException("Error while executing request", e);
+            throw new HttpException(ERROR_WHILE_EXECUTING_REQUEST, e);
         }
     }
 
@@ -143,22 +145,23 @@ public class HttpClient {
     }
 
     private <T> Optional<T> parseJson(Function<JsonNode, T> jsonNodeFunction, Response response) throws IOException {
-        final ResponseBody body = response.body();
-        if (response.isSuccessful()) {
-            if (body == null || jsonNodeFunction == null) {
+        try(final ResponseBody body = response.body()) {
+            if (response.isSuccessful()) {
+                if (body == null || jsonNodeFunction == null) {
+                    return Optional.empty();
+                }
+                String bodyString = body.string();
+                if (bodyString == null || bodyString.isEmpty()) {
+                    return Optional.empty();
+                }
+                JsonNode tree = JsonUtils.readTree(bodyString);
+                return Optional.ofNullable(jsonNodeFunction.apply(tree));
+            } else if (response.code() == 404) {
                 return Optional.empty();
+            } else {
+                final String details = body != null ? body.string() : "No details";
+                throw new HttpException(response.code(), String.format("HTTP Error %s: %s.", response.code(), details));
             }
-            String bodyString = body.string();
-            if (bodyString == null || bodyString.isEmpty()) {
-                return Optional.empty();
-            }
-            JsonNode tree = JsonUtils.readTree(bodyString);
-            return Optional.ofNullable(jsonNodeFunction.apply(tree));
-        } else if (response.code() == 404) {
-            return Optional.empty();
-        } else {
-            final String details = body != null ? body.string() : "No details";
-            throw new HttpException(response.code(), String.format("HTTP Error %s: %s.", response.code(), details));
         }
     }
 
