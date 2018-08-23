@@ -39,8 +39,8 @@ public class HttpClient {
 
     private final OkHttpClient client;
 
-    private HttpClient(final OkHttpClient client) {
-        this.client = requireNonNull(client, "client must be specified.");
+    private HttpClient(final OkHttpClient okHttpClient) {
+        this.client = requireNonNull(okHttpClient, "client must be specified.");
     }
 
     /**
